@@ -10,6 +10,78 @@ Demo này showcase một **Flash Sale scenario** với:
 
 ---
 
+## 🔴 Vai Trò Của Redis Trong Demo
+
+### Redis Làm Gì?
+
+**Redis đóng vai trò QUAN TRỌNG trong việc ngăn chặn race condition:**
+
+1. **In-Memory Stock Counter**
+   - Lưu stock counter trong memory (key: `stock:FLASH_SALE_PRODUCT_001`)
+   - Nhanh hơn database 100x
+   - Được sync từ PostgreSQL khi service start
+
+2. **Atomic Operations**
+   - Redis `DECR` là **single atomic operation**
+   - Không thể bị race condition vì là 1 command duy nhất
+   - Kết quả được đảm bảo chính xác
+
+3. **WATCH/MULTI/EXEC Pattern**
+   - `WATCH`: Monitor key để detect concurrent changes
+   - `MULTI`: Bắt đầu transaction
+   - `EXEC`: Execute transaction (chỉ thành công nếu key không bị modify)
+   - Nếu key bị modify → transaction fail → retry
+
+**Code Implementation:**
+
+```typescript
+// apps/services/inventory-service/src/modules/redis/redis.service.ts
+
+async reserveStockAtomic(key: string, quantity: number) {
+  // 1. Watch key để detect concurrent modifications
+  await this.client.watch(key);
+
+  try {
+    // 2. Get current stock
+    const stock = await this.client.get(key);
+
+    if (stock >= quantity) {
+      // 3. Atomic transaction: DECR trong MULTI/EXEC
+      const multi = this.client.multi();
+      multi.decrBy(key, quantity);
+      const results = await multi.exec();
+
+      if (results === null) {
+        // Key bị modify bởi process khác → retry
+        return this.reserveStockAtomic(key, quantity);
+      }
+
+      return { success: true, newStock: results[0] };
+    } else {
+      return { success: false, newStock: stock };
+    }
+  } finally {
+    await this.client.unwatch();
+  }
+}
+```
+
+**Tại Sao Redis Thay Vì Database?**
+
+| Approach                        | Race Condition?     | Performance | Throughput     |
+| ------------------------------- | ------------------- | ----------- | -------------- |
+| **Database SELECT + UPDATE**    | ❌ Có thể xảy ra    | ~10ms       | ~100 ops/s     |
+| **Database Transaction (LOCK)** | ✅ An toàn          | ~50-100ms   | ~10-20 ops/s   |
+| **Redis Atomic DECR**           | ✅ Không thể xảy ra | ~0.1ms      | ~100,000 ops/s |
+
+**Kết Luận:**
+
+- Redis là **essential** cho high-performance inventory management
+- Atomic operations đảm bảo **không bao giờ oversell**
+- Kết hợp với Kafka message ordering → **double protection**
+
+---
+
 ## 🔍 Vấn Đề Được Giải Quyết: Race Condition
 
 ### ❌ Vấn Đề Nếu Không Có Kafka (Synchronous Architecture)
