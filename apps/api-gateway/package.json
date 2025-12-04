@@ -1,0 +1,43 @@
+{
+    "name": "api-gateway",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+      "dev": "nodemon",
+      "build": "nest build",
+      "postbuild": "node scripts/fix-build.js",
+      "start": "node dist/main",
+      "start:prod": "node dist/main",
+      "start:dev": "nest start --watch"
+    },
+    "dependencies": {
+      "@nestjs/common": "^11.1.9",
+      "@nestjs/core": "^11.1.9",
+      "@nestjs/platform-express": "^11.1.9",
+      "@nestjs/microservices": "^11.1.9",
+      "@nestjs/websockets": "^11.1.9",
+      "@nestjs/platform-socket.io": "^11.1.9",
+      "@nestjs/config": "^3.3.0",
+      "kafkajs": "^2.2.4",
+      "socket.io": "^4.8.1",
+      "shared-types": "workspace:*",
+      "kafka-config": "workspace:*",
+      "common-utils": "workspace:*",
+      "class-validator": "^0.14.1",
+      "class-transformer": "^0.5.1",
+      "reflect-metadata": "^0.2.2",
+      "rxjs": "^7.8.1",
+      "axios": "^1.7.8"
+    },
+    "devDependencies": {
+      "@nestjs/cli": "^11.0.14",
+      "@nestjs/schematics": "^11.0.5",
+      "@nestjs/testing": "^11.1.9",
+      "@types/express": "^5.0.0",
+      "@types/node": "^22.10.0",
+      "typescript": "^5.7.2",
+      "ts-node": "^10.9.2",
+      "tsconfig-paths": "^4.2.0",
+      "nodemon": "^3.1.7"
+    }
+  }

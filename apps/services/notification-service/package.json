@@ -1,0 +1,33 @@
+{
+    "name": "notification-service",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+      "dev": "nodemon",
+      "build": "nest build",
+      "postbuild": "node scripts/fix-build.js",
+      "start": "node dist/main",
+      "start:prod": "node dist/main"
+    },
+    "dependencies": {
+      "@nestjs/common": "^11.1.9",
+      "@nestjs/core": "^11.1.9",
+      "@nestjs/microservices": "^11.1.9",
+      "@nestjs/config": "^3.3.0",
+      "kafkajs": "^2.2.4",
+      "shared-types": "workspace:*",
+      "kafka-config": "workspace:*",
+      "common-utils": "workspace:*",
+      "reflect-metadata": "^0.2.2",
+      "rxjs": "^7.8.1"
+    },
+    "devDependencies": {
+      "@nestjs/cli": "^11.0.14",
+      "@nestjs/testing": "^11.1.9",
+      "@types/node": "^22.10.0",
+      "typescript": "^5.7.2",
+      "ts-node": "^10.9.2",
+      "tsconfig-paths": "^4.2.0",
+      "nodemon": "^3.1.7"
+    }
+  }
