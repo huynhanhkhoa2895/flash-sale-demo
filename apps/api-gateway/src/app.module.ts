@@ -4,6 +4,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { OrdersModule } from "./modules/orders/orders.module";
 import { WebsocketModule } from "./modules/websocket/websocket.module";
+import { ProductsModule } from "./modules/products/products.module";
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { WebsocketModule } from "./modules/websocket/websocket.module";
 
     // Feature modules
     OrdersModule,
+    ProductsModule,
     WebsocketModule,
   ],
   controllers: [],

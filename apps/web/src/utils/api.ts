@@ -73,6 +73,29 @@ export const apiClient = {
     );
     return response.data;
   },
+
+  // Reset stock to 1
+  resetStock: async (
+    productId: string
+  ): Promise<{ productId: string; availableStock: number }> => {
+    const response: AxiosResponse<{
+      productId: string;
+      availableStock: number;
+    }> = await api.put(`/api/products/${productId}/stock`, { stock: 1 });
+    return response.data;
+  },
+
+  // Set stock to a specific value
+  setStock: async (
+    productId: string,
+    stock: number
+  ): Promise<{ productId: string; availableStock: number }> => {
+    const response: AxiosResponse<{
+      productId: string;
+      availableStock: number;
+    }> = await api.put(`/api/products/${productId}/stock`, { stock });
+    return response.data;
+  },
 };
 
 // Error handling utilities

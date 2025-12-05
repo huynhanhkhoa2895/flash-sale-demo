@@ -7,33 +7,41 @@ import { AppModule } from "./app.module";
 import { Logger } from "common-utils";
 
 async function bootstrap() {
-  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
-    AppModule,
-    {
-      transport: Transport.KAFKA,
-      options: {
-        client: {
-          clientId: "inventory-service",
-          brokers: [process.env.KAFKA_BROKERS || "localhost:9092"],
-          retry: {
-            initialRetryTime: 300,
-            retries: 8,
-            multiplier: 2,
-            maxRetryTime: 30000,
-          },
-          connectionTimeout: 10000,
-          requestTimeout: 30000,
+  // Create hybrid app: HTTP + Kafka microservice
+  const app = await NestFactory.create(AppModule);
+
+  // Enable CORS
+  app.enableCors({
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    credentials: true,
+  });
+
+  // Connect Kafka microservice
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.KAFKA,
+    options: {
+      client: {
+        clientId: "inventory-service",
+        brokers: [process.env.KAFKA_BROKERS || "localhost:9092"],
+        retry: {
+          initialRetryTime: 300,
+          retries: 8,
+          multiplier: 2,
+          maxRetryTime: 30000,
         },
-        consumer: {
-          groupId: "inventory-service-group",
-          sessionTimeout: 30000,
-          heartbeatInterval: 3000,
-          rebalanceTimeout: 60000,
-          allowAutoTopicCreation: true,
-        },
+        connectionTimeout: 10000,
+        requestTimeout: 30000,
       },
-    }
-  );
+      consumer: {
+        groupId: "inventory-service-group",
+        sessionTimeout: 60000,
+        heartbeatInterval: 5000,
+        rebalanceTimeout: 120000,
+        allowAutoTopicCreation: true,
+        maxInFlightRequests: 1,
+      },
+    },
+  });
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -44,8 +52,14 @@ async function bootstrap() {
     })
   );
 
-  await app.listen();
-  Logger.info("🚀 Inventory Service is running as Kafka microservice");
+  // Start HTTP server
+  const httpPort = parseInt(process.env.HTTP_PORT || "3004");
+  await app.listen(httpPort);
+  Logger.info(`🚀 Inventory Service HTTP server running on port ${httpPort}`);
+
+  // Start Kafka microservice
+  await app.startAllMicroservices();
+  Logger.info("🚀 Inventory Service Kafka microservice started");
 }
 
 bootstrap().catch((error) => {

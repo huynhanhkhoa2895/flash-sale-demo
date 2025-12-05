@@ -9,8 +9,13 @@ import {
 } from "@nestjs/common";
 import { MessagePattern, Payload } from "@nestjs/microservices";
 import { OrdersService } from "./orders.service";
-import { OrderCreatedEvent, OrderResponse } from "shared-types";
+import {
+  OrderCreatedEvent,
+  OrderResponse,
+  ProductResponse,
+} from "shared-types";
 import { Logger } from "common-utils";
+import axios from "axios";
 
 @Controller()
 export class OrdersController {
@@ -126,6 +131,79 @@ export class OrdersController {
       Logger.error("❌ Failed to get order status", {
         error: error.message,
         orderId,
+      });
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: error.message,
+          error: "Internal Server Error",
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  // HTTP endpoint to get product information
+  @Get("products/:productId")
+  async getProduct(
+    @Param("productId") productId: string
+  ): Promise<ProductResponse> {
+    try {
+      Logger.info("📥 Received HTTP request for product", { productId });
+
+      const product = await this.ordersService.getProductById(productId);
+
+      if (!product) {
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.NOT_FOUND,
+            message: `Product with ID ${productId} not found`,
+            error: "Not Found",
+          },
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // Get current stock from Redis via inventory service
+      let availableStock = product.currentStock;
+      try {
+        const inventoryServiceUrl =
+          process.env.INVENTORY_SERVICE_URL || "http://localhost:3004";
+        const stockResponse = await axios.get<{
+          productId: string;
+          availableStock: number;
+        }>(`${inventoryServiceUrl}/stock/${productId}`, { timeout: 2000 });
+        availableStock = stockResponse.data.availableStock;
+        Logger.info("Got stock from Redis", { productId, availableStock });
+      } catch (error) {
+        Logger.warn(
+          "Failed to get stock from inventory service, using database stock",
+          {
+            error: error.message,
+            productId,
+          }
+        );
+        // Fallback to database stock if inventory service unavailable
+      }
+
+      const response: ProductResponse = {
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        price: parseFloat(product.price.toString()),
+        availableStock: availableStock,
+      };
+
+      return response;
+    } catch (error) {
+      Logger.error("❌ Failed to get product", {
+        error: error.message,
+        productId,
       });
 
       if (error instanceof HttpException) {

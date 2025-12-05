@@ -25,6 +25,21 @@ import { RedisModule } from "../redis/redis.module";
           client: {
             clientId: "inventory-service-publisher",
             brokers: [process.env.KAFKA_BROKERS || "localhost:9092"],
+            retry: {
+              initialRetryTime: 300,
+              retries: 8,
+              multiplier: 2,
+              maxRetryTime: 30000,
+            },
+            connectionTimeout: 10000,
+            requestTimeout: 30000,
+          },
+          consumer: {
+            groupId: "inventory-service-publisher-group",
+            sessionTimeout: 60000,
+            heartbeatInterval: 5000,
+            rebalanceTimeout: 120000,
+            allowAutoTopicCreation: true,
           },
         },
       },

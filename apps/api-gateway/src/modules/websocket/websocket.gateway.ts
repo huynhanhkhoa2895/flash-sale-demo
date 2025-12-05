@@ -39,7 +39,7 @@ export class WebsocketGateway
     OnModuleDestroy
 {
   @WebSocketServer()
-  server: Server;
+  server: Server | any; // Allow manual assignment for separate server
 
   private consumer: KafkaConsumer;
   private connectedClients = new Map<string, Socket>();
@@ -196,6 +196,7 @@ export class WebsocketGateway
 
     // Broadcast stock updates to all connected clients
     this.server.emit("message", stockUpdateMessage);
+    this.server.emit("stock_update", stockUpdateMessage);
 
     Logger.info("📤 Broadcasted stock update via WebSocket", {
       productId: event.data.productId,
@@ -217,7 +218,7 @@ export class WebsocketGateway
     return {
       totalConnections: this.connectedClients.size,
       rooms: Array.from(this.server.sockets.adapter.rooms.keys()).filter(
-        (key) => key.startsWith("order_")
+        (key: string) => key.startsWith("order_")
       ),
     };
   }

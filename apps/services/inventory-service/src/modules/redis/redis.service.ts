@@ -97,6 +97,22 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return newStock;
   }
 
+  // Set stock to a specific value
+  async setStock(productId: string, stock: number): Promise<number> {
+    const key = `stock:${productId}`;
+
+    // Use SET for atomic operation
+    await this.client.set(key, stock.toString());
+
+    Logger.info("Stock set", {
+      productId,
+      stock,
+      operation: "set",
+    });
+
+    return stock;
+  }
+
   // Check if stock is available (without reserving)
   async checkStockAvailability(
     productId: string,

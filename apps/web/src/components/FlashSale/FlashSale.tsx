@@ -4,13 +4,29 @@ import React, { useState, useEffect, useRef } from 'react';
 import { OrderForm } from '../OrderForm/OrderForm';
 import { OrderStatus } from '../OrderStatus/OrderStatus';
 import { StockDisplay } from '../StockDisplay/StockDisplay';
+import { StockControl } from '../StockControl/StockControl';
 import { apiClient } from '../../utils/api';
-import { OrderResponse, OrderStatus as OrderStatusEnum } from 'shared-types';
+import { websocketManager } from '../../utils/websocket';
+import { OrderResponse, OrderStatus as OrderStatusEnum, StockUpdateMessage, WebSocketMessage } from 'shared-types';
 
 export const FlashSale: React.FC = () => {
   const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [currentStock, setCurrentStock] = useState<number>(1);
   const pollingIntervals = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Fetch stock on mount (F5)
+  useEffect(() => {
+    const fetchStock = async () => {
+      try {
+        const product = await apiClient.getProduct('FLASH_SALE_PRODUCT_001');
+        setCurrentStock(product.availableStock);
+      } catch (error) {
+        console.error('Failed to fetch stock:', error);
+      }
+    };
+
+    fetchStock();
+  }, []);
 
   // Simple polling to check order status
   const pollOrderStatus = (orderId: string) => {
@@ -36,9 +52,19 @@ export const FlashSale: React.FC = () => {
           }
         });
 
-        // Update stock if order is confirmed
+        // Update stock based on order status
         if (order.status === OrderStatusEnum.CONFIRMED) {
           setCurrentStock(prev => Math.max(0, prev - order.quantity));
+        } else if (order.status === OrderStatusEnum.CANCELLED) {
+          // When order is cancelled, stock should be restored
+          // But actually, cancelled orders never reserved stock, so no change needed
+          // However, we should refresh stock to get accurate count
+          try {
+            const product = await apiClient.getProduct('FLASH_SALE_PRODUCT_001');
+            setCurrentStock(product.availableStock);
+          } catch (error) {
+            console.error('Failed to refresh stock after cancellation:', error);
+          }
         }
 
         // Stop polling when order is finalized (CONFIRMED or CANCELLED)
@@ -68,10 +94,26 @@ export const FlashSale: React.FC = () => {
   };
 
   useEffect(() => {
-    // Cleanup intervals on unmount
+    // Connect WebSocket and listen for stock updates
+    websocketManager.connect().catch(console.error);
+
+    // Listen for stock updates via WebSocket
+    const handleStockUpdate = (message: WebSocketMessage) => {
+      if (message.type === 'stock_update') {
+        const stockMessage = message as StockUpdateMessage;
+        if (stockMessage.data.productId === 'FLASH_SALE_PRODUCT_001') {
+          setCurrentStock(stockMessage.data.availableStock);
+        }
+      }
+    };
+
+    websocketManager.on('stock_update', handleStockUpdate);
+
+    // Cleanup intervals and WebSocket on unmount
     return () => {
       pollingIntervals.current.forEach(interval => clearInterval(interval));
       pollingIntervals.current.clear();
+      websocketManager.off('stock_update', handleStockUpdate);
     };
   }, []);
 
@@ -118,6 +160,15 @@ export const FlashSale: React.FC = () => {
                 Experience the power of event-driven architecture with Kafka.
               </p>
                       <StockDisplay currentStock={currentStock} totalStock={100} />
+                      <div className="mt-4">
+                        <StockControl
+                          productId="FLASH_SALE_PRODUCT_001"
+                          currentStock={currentStock}
+                          onStockUpdated={(newStock) => {
+                            setCurrentStock(newStock);
+                          }}
+                        />
+                      </div>
                       <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                         <p className="text-sm text-yellow-800">
                           <strong>⚠️ Demo Mode:</strong> Only 1 item left! Try opening this page in 2 browser tabs and clicking "Buy Now" simultaneously to see race condition handling.

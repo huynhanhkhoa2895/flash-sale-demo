@@ -1,0 +1,179 @@
+version: "3.8"
+
+services:
+  # Infrastructure services (same as base docker-compose.yml)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    hostname: zookeeper
+    container_name: zookeeper-prod
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - flash-sale-network
+    restart: unless-stopped
+
+  kafka:
+    image: wurstmeister/kafka:2.13-2.8.1
+    hostname: kafka
+    container_name: kafka-prod
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_RETENTION_BYTES: -1
+    networks:
+      - flash-sale-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres-prod
+    environment:
+      POSTGRES_DB: flash_sale
+      POSTGRES_USER: flashsale
+      POSTGRES_PASSWORD: flashsale123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - flash-sale-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-prod
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass flashsale123
+    volumes:
+      - redis_data:/data
+    networks:
+      - flash-sale-network
+    restart: unless-stopped
+
+  # Application services
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: web-prod
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    depends_on:
+      - api-gateway
+    networks:
+      - flash-sale-network
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: apps/api-gateway/Dockerfile
+    container_name: api-gateway-prod
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - KAFKA_BROKERS=kafka:29092
+      - FRONTEND_URL=http://web:3000
+      - ORDER_SERVICE_URL=http://order-service:3002
+    depends_on:
+      - kafka
+      - order-service
+    networks:
+      - flash-sale-network
+    restart: unless-stopped
+
+  order-service:
+    build:
+      context: .
+      dockerfile: apps/services/order-service/Dockerfile
+    container_name: order-service-prod
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - HTTP_PORT=3002
+      - KAFKA_BROKERS=kafka:29092
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=flashsale
+      - DB_PASSWORD=flashsale123
+      - DB_DATABASE=flash_sale
+      - FRONTEND_URL=http://web:3000
+    depends_on:
+      - kafka
+      - postgres
+    networks:
+      - flash-sale-network
+    restart: unless-stopped
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: apps/services/inventory-service/Dockerfile
+    container_name: inventory-service-prod
+    environment:
+      - NODE_ENV=production
+      - KAFKA_BROKERS=kafka:29092
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=flashsale123
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=flashsale
+      - DB_PASSWORD=flashsale123
+      - DB_DATABASE=flash_sale
+    depends_on:
+      - kafka
+      - redis
+      - postgres
+    networks:
+      - flash-sale-network
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: apps/services/notification-service/Dockerfile
+    container_name: notification-service-prod
+    environment:
+      - NODE_ENV=production
+      - KAFKA_BROKERS=kafka:29092
+    depends_on:
+      - kafka
+    networks:
+      - flash-sale-network
+    restart: unless-stopped
+
+networks:
+  flash-sale-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+

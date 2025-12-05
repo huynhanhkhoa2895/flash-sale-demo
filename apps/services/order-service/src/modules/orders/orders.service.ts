@@ -5,6 +5,7 @@ import { ClientKafka } from "@nestjs/microservices";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { OrderEntity } from "./order.entity";
+import { ProductEntity } from "./product.entity";
 import {
   OrderStatus,
   OrderConfirmedEvent,
@@ -17,6 +18,8 @@ export class OrdersService implements OnModuleInit {
   constructor(
     @InjectRepository(OrderEntity)
     private readonly orderRepository: Repository<OrderEntity>,
+    @InjectRepository(ProductEntity)
+    private readonly productRepository: Repository<ProductEntity>,
     @Inject("KAFKA_CLIENT")
     private readonly kafkaClient: ClientKafka
   ) {}
@@ -146,5 +149,9 @@ export class OrdersService implements OnModuleInit {
       reason: "Out of stock",
     });
     await this.cancelOrder(data.orderId, "Out of stock");
+  }
+
+  async getProductById(productId: string): Promise<ProductEntity | null> {
+    return this.productRepository.findOne({ where: { id: productId } });
   }
 }

@@ -22,6 +22,21 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
           client: {
             clientId: "notification-service-publisher",
             brokers: [process.env.KAFKA_BROKERS || "localhost:9092"],
+            retry: {
+              initialRetryTime: 300,
+              retries: 8,
+              multiplier: 2,
+              maxRetryTime: 30000,
+            },
+            connectionTimeout: 10000,
+            requestTimeout: 30000,
+          },
+          consumer: {
+            groupId: "notification-service-publisher-group",
+            sessionTimeout: 60000,
+            heartbeatInterval: 5000,
+            rebalanceTimeout: 120000,
+            allowAutoTopicCreation: true,
           },
         },
       },

@@ -181,6 +181,50 @@ export class InventoryService implements OnModuleInit {
     return this.redisService.getStock(productId);
   }
 
+  // Set stock to a specific value
+  async setStock(productId: string, stock: number): Promise<number> {
+    const newStock = await this.redisService.setStock(productId, stock);
+
+    // Also update database
+    try {
+      const product = await this.productRepository.findOne({
+        where: { id: productId },
+      });
+
+      if (product) {
+        product.currentStock = stock;
+        await this.productRepository.save(product);
+        Logger.info("Database stock updated", { productId, stock });
+      }
+    } catch (error) {
+      Logger.warn("Failed to update database stock", {
+        productId,
+        stock,
+        error: error.message,
+      });
+    }
+
+    // Emit stock update event
+    try {
+      const stockUpdateEvent = createBaseEvent("notification.stock_update", {
+        productId,
+        availableStock: stock,
+        message: `Stock updated to ${stock}`,
+      });
+
+      await this.kafkaClient.emit("notification.events", stockUpdateEvent);
+      Logger.info("Stock update event emitted", { productId, stock });
+    } catch (error) {
+      Logger.warn("Failed to emit stock update event", {
+        productId,
+        stock,
+        error: error.message,
+      });
+    }
+
+    return newStock;
+  }
+
   // Get product name for notifications
   private async getProductName(productId: string): Promise<string> {
     try {

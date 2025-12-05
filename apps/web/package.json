@@ -1,31 +1,32 @@
 {
-    "name": "web",
-    "version": "1.0.0",
-    "private": true,
-    "scripts": {
-      "predev": "node scripts/cleanup.js || true",
-      "dev": "next dev",
-      "build": "next build",
-      "start": "next start",
-      "lint": "next lint"
-    },
-    "dependencies": {
-      "next": "^16.0.6",
-      "react": "^19.0.0",
-      "react-dom": "^19.0.0",
-      "@tanstack/react-query": "^5.62.0",
-      "axios": "^1.7.8",
-      "shared-types": "workspace:*",
-      "clsx": "^2.1.1",
-      "tailwindcss": "^3.4.15"
-    },
-    "devDependencies": {
-      "@types/react": "^19.0.0",
-      "@types/react-dom": "^19.0.0",
-      "typescript": "^5.7.2",
-      "autoprefixer": "^10.4.20",
-      "postcss": "^8.4.49",
-      "eslint": "^9.15.0",
-      "eslint-config-next": "^16.0.6"
-    }
+  "name": "web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/cleanup.js || true",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.62.0",
+    "axios": "^1.7.8",
+    "clsx": "^2.1.1",
+    "next": "^16.0.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "shared-types": "workspace:*",
+    "socket.io-client": "^4.8.1",
+    "tailwindcss": "^3.4.15"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.15.0",
+    "eslint-config-next": "^16.0.6",
+    "postcss": "^8.4.49",
+    "typescript": "^5.7.2"
   }
+}

@@ -1,5 +1,6 @@
-// WebSocket utilities for real-time communication
+// WebSocket utilities for real-time communication using Socket.IO
 
+import { io, Socket } from "socket.io-client";
 import {
   WebSocketMessage,
   OrderUpdateMessage,
@@ -10,22 +11,42 @@ import {
 export type WebSocketEventHandler = (message: WebSocketMessage) => void;
 
 export class WebSocketManager {
-  private ws: WebSocket | null = null;
+  private socket: Socket | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectInterval = 1000;
   private eventHandlers: Map<string, WebSocketEventHandler[]> = new Map();
   private orderSubscriptions: Set<string> = new Set();
+  private isConnecting = false;
 
-  constructor(private url: string = "ws://localhost:3001/ws") {}
+  constructor(private url: string = "http://localhost:3003") {
+    // Socket.IO client connects to separate WebSocket server
+    // Namespace /ws will be added automatically
+  }
 
   connect(): Promise<void> {
+    if (this.isConnecting || (this.socket && this.socket.connected)) {
+      return Promise.resolve();
+    }
+
+    this.isConnecting = true;
+
     return new Promise((resolve, reject) => {
       try {
-        this.ws = new WebSocket(this.url);
+        // Socket.IO client with namespace /ws
+        this.socket = io(`${this.url}/ws`, {
+          transports: ["websocket", "polling"],
+          reconnection: true,
+          reconnectionAttempts: this.maxReconnectAttempts,
+          reconnectionDelay: this.reconnectInterval,
+          reconnectionDelayMax: 8000,
+          timeout: 20000,
+          forceNew: false,
+        });
 
-        this.ws.onopen = () => {
-          console.log("✅ WebSocket connected");
+        this.socket.on("connect", () => {
+          console.log("✅ WebSocket connected", { socketId: this.socket?.id });
+          this.isConnecting = false;
           this.reconnectAttempts = 0;
           this.emitEvent("connected", {
             type: "system",
@@ -37,63 +58,59 @@ export class WebSocketManager {
           this.resubscribeToOrders();
 
           resolve();
-        };
+        });
 
-        this.ws.onmessage = (event) => {
-          try {
-            const message: WebSocketMessage = JSON.parse(event.data);
-            this.handleMessage(message);
-          } catch (error) {
-            console.error("Failed to parse WebSocket message:", error);
-          }
-        };
-
-        this.ws.onclose = () => {
-          console.log("❌ WebSocket disconnected");
+        this.socket.on("disconnect", (reason) => {
+          console.log("❌ WebSocket disconnected", { reason });
+          this.isConnecting = false;
           this.emitEvent("disconnected", {
             type: "system",
-            data: { message: "Disconnected" },
+            data: { message: "Disconnected", reason },
             timestamp: new Date().toISOString(),
           });
-          this.attemptReconnect();
-        };
+        });
 
-        this.ws.onerror = (error) => {
-          console.error("WebSocket error:", error);
-          reject(error);
-        };
+        this.socket.on("connect_error", (error) => {
+          console.error("WebSocket connection error:", error);
+          this.isConnecting = false;
+          this.reconnectAttempts++;
+
+          if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            reject(error);
+          }
+        });
+
+        // Listen for messages from server
+        this.socket.on("message", (message: WebSocketMessage) => {
+          this.handleMessage(message);
+        });
+
+        // Listen for order updates
+        this.socket.on("order_update", (message: OrderUpdateMessage) => {
+          this.emitEvent("order_update", message);
+        });
+
+        // Listen for stock updates
+        this.socket.on("stock_update", (message: StockUpdateMessage) => {
+          this.emitEvent("stock_update", message);
+        });
+
+        // Listen for errors
+        this.socket.on("error", (message: ErrorMessage) => {
+          this.emitEvent("error", message);
+        });
       } catch (error) {
+        this.isConnecting = false;
         reject(error);
       }
     });
   }
 
   disconnect(): void {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
     }
-  }
-
-  private attemptReconnect(): void {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error("Max reconnection attempts reached");
-      return;
-    }
-
-    this.reconnectAttempts++;
-    const delay =
-      this.reconnectInterval * Math.pow(2, this.reconnectAttempts - 1);
-
-    console.log(
-      `Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
-    );
-
-    setTimeout(() => {
-      this.connect().catch(() => {
-        // Ignore connection errors during reconnection
-      });
-    }, delay);
   }
 
   private handleMessage(message: WebSocketMessage): void {
@@ -151,25 +168,15 @@ export class WebSocketManager {
 
   // Order subscription methods
   subscribeToOrder(orderId: string): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(
-        JSON.stringify({
-          event: "subscribe_order",
-          data: orderId,
-        })
-      );
+    if (this.socket && this.socket.connected) {
+      this.socket.emit("subscribe_order", orderId);
       this.orderSubscriptions.add(orderId);
     }
   }
 
   unsubscribeFromOrder(orderId: string): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(
-        JSON.stringify({
-          event: "unsubscribe_order",
-          data: orderId,
-        })
-      );
+    if (this.socket && this.socket.connected) {
+      this.socket.emit("unsubscribe_order", orderId);
       this.orderSubscriptions.delete(orderId);
     }
   }
@@ -182,31 +189,22 @@ export class WebSocketManager {
 
   // Send ping to keep connection alive
   ping(): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ event: "ping" }));
+    if (this.socket && this.socket.connected) {
+      this.socket.emit("ping");
     }
   }
 
   // Connection status
   get isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.socket?.connected || false;
   }
 
   get connectionState(): string {
-    if (!this.ws) return "disconnected";
+    if (!this.socket) return "disconnected";
 
-    switch (this.ws.readyState) {
-      case WebSocket.CONNECTING:
-        return "connecting";
-      case WebSocket.OPEN:
-        return "connected";
-      case WebSocket.CLOSING:
-        return "closing";
-      case WebSocket.CLOSED:
-        return "disconnected";
-      default:
-        return "unknown";
-    }
+    if (this.socket.connected) return "connected";
+    if (this.socket.disconnected) return "disconnected";
+    return "connecting";
   }
 }
 

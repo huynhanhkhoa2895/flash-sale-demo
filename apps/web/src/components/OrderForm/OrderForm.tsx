@@ -1,6 +1,6 @@
 // Order Form Component
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { apiClient, handleApiError } from '../../utils/api';
 import { CreateOrderRequest, CreateOrderResponse } from 'shared-types';
@@ -14,15 +14,17 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   onOrderCreated,
   currentStock,
 }) => {
-  const [userId, setUserId] = useState('');
-  const [quantity, setQuantity] = useState(1);
+  // State trung gian cho input - có thể là string rỗng để user có thể xóa
+  const [quantityInput, setQuantityInput] = useState<string>('1');
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
 
-  // Generate random user ID for demo
-  const generateRandomUserId = () => {
-    const randomId = `user_${Math.random().toString(36).substr(2, 9)}`;
-    setUserId(randomId);
-  };
+  // Convert quantityInput sang number, mặc định là 1 nếu rỗng hoặc invalid
+  const quantity = quantityInput === '' ? 1 : parseInt(quantityInput, 10) || 1;
+
+  // Generate random user ID automatically
+  const generateUserId = useCallback(() => {
+    return `user_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
+  }, []);
 
   // Create order mutation
   const createOrderMutation = useMutation<
@@ -35,8 +37,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       setLastOrderId(data.orderId);
       onOrderCreated(data.orderId);
       // Clear form
-      setUserId('');
-      setQuantity(1);
+      setQuantityInput('1');
     },
     onError: (error) => {
       console.error('Failed to create order:', error);
@@ -45,11 +46,6 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!userId.trim()) {
-      alert('Please enter a user ID');
-      return;
-    }
 
     if (quantity < 1) {
       alert('Quantity must be at least 1');
@@ -61,8 +57,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       return;
     }
 
+    // Auto-generate userId
+    const userId = generateUserId();
+
     const request: CreateOrderRequest = {
-      userId: userId.trim(),
+      userId,
       productId: 'FLASH_SALE_PRODUCT_001',
       quantity,
     };
@@ -146,32 +145,6 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       {/* Order Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="userId" className="block text-sm font-medium text-gray-700 mb-1">
-            User ID
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              id="userId"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              placeholder="Enter your user ID"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={isLoading}
-              required
-            />
-            <button
-              type="button"
-              onClick={generateRandomUserId}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
-              disabled={isLoading}
-            >
-              🎲 Random
-            </button>
-          </div>
-        </div>
-
-        <div>
           <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">
             Quantity
           </label>
@@ -180,8 +153,21 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             id="quantity"
             min="1"
             max={currentStock}
-            value={quantity}
-            onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+            value={quantityInput}
+            onChange={(e) => {
+              const value = e.target.value;
+              // Cho phép rỗng để user có thể xóa
+              if (value === '' || (!isNaN(Number(value)) && Number(value) >= 0)) {
+                setQuantityInput(value);
+              }
+            }}
+            onBlur={(e) => {
+              // Khi blur, nếu rỗng hoặc invalid thì set về 1
+              const value = e.target.value;
+              if (value === '' || isNaN(Number(value)) || Number(value) < 1) {
+                setQuantityInput('1');
+              }
+            }}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             disabled={isLoading}
             required
@@ -218,7 +204,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           📚 Demo Instructions
         </h3>
         <ul className="text-xs text-blue-700 space-y-1">
-          <li>• Use the "Random" button to generate a user ID</li>
+          <li>• User ID is automatically generated for each order</li>
           <li>• Try ordering multiple items quickly to see race condition handling</li>
           <li>• Watch real-time updates in the order status panel</li>
           <li>• Open multiple browser tabs to simulate concurrent users</li>

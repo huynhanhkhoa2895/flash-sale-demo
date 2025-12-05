@@ -20,21 +20,23 @@ A comprehensive demonstration of **why Kafka matters** in microservices architec
 
 - **Kafka Event-Driven Architecture**: Decoupled, scalable, reliable
 - **Atomic Operations**: Redis prevents race conditions
-- **Real-Time Updates**: REST API polling for order status
+- **Real-Time Updates**: REST API polling for order status + WebSocket for stock updates
+- **Stock Management**: Auto-fetch on page load (F5), refresh on cancellation, real-time sync
 - **Event Sourcing**: Complete audit trail
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────┐
-│   Next.js   │  ← Frontend with REST API polling
-│   Frontend  │
-└──────┬──────┘
-       │ HTTP REST
+│   Next.js   │  ← Frontend with REST API polling + WebSocket
+│   Frontend  │     • Auto-fetch stock on page load (F5)
+│             │     • Real-time stock updates via WebSocket
+└──────┬──────┘     • Stock refresh on order cancellation
+       │ HTTP REST + WebSocket
 ┌──────▼─────────────────┐
-│   API Gateway          │  ← REST API
-│   (NestJS)             │
-└──────┬─────────────────┘
+│   API Gateway          │  ← REST API + WebSocket Gateway
+│   (NestJS)             │     • GET /api/products/:productId
+└──────┬─────────────────┘     • WebSocket stock broadcasts
        │ Kafka Producer
 ┌──────▼─────────────────────────────────────┐
 │              Kafka Cluster                 │
@@ -181,15 +183,19 @@ pnpm reset:stock
 ### 2. Normal Purchase Flow
 
 - Open http://localhost:3000
+- Stock is automatically fetched from API (check console logs)
 - Enter User ID (or click "🎲 Random")
 - Click "🚀 Buy Now"
 - Watch order status update via polling
+- Stock updates automatically via WebSocket when order is confirmed/cancelled
 
 ### 3. Out of Stock Scenario
 
 - Keep buying until stock reaches 0
 - See "Out of Stock" messages
 - Watch cancelled orders in status panel
+- Stock automatically refreshes when order is cancelled (UI updates)
+- Refresh page (F5) to see accurate stock count
 
 ### 4. Monitor Events in Kafka UI
 
@@ -231,6 +237,13 @@ pnpm docker:logs
 ```
 
 ## 🎯 Key Features Demonstrated
+
+### ✅ Real-Time Stock Management
+
+- **Auto-Fetch on Page Load**: Stock is fetched from API when page loads (F5)
+- **WebSocket Updates**: Real-time stock updates via WebSocket messages
+- **Stock Refresh on Cancellation**: Stock automatically refreshes when order is cancelled
+- **UI Synchronization**: Stock display updates across all browser tabs in real-time
 
 ### ✅ Race Condition Prevention với Redis
 
@@ -324,6 +337,29 @@ const pollOrderStatus = async (orderId: string) => {
     // Stop polling
   }
 };
+```
+
+### ✅ Real-Time Stock Updates
+
+- **WebSocket Integration**: Stock updates broadcast via WebSocket
+- **Auto Refresh on Page Load**: Stock fetched from API when page loads (F5)
+- **Stock Update on Order Cancellation**: Stock refreshed when order is cancelled
+- **Real-Time Sync**: WebSocket messages update stock instantly across all clients
+
+```typescript
+// Fetch stock on mount (F5)
+useEffect(() => {
+  const fetchStock = async () => {
+    const product = await apiClient.getProduct("FLASH_SALE_PRODUCT_001");
+    setCurrentStock(product.availableStock);
+  };
+  fetchStock();
+}, []);
+
+// Listen for WebSocket stock updates
+websocketManager.on("stock_update", (message) => {
+  setCurrentStock(message.data.availableStock);
+});
 ```
 
 ### ✅ At-Least-Once Delivery
@@ -554,6 +590,36 @@ GET /api/orders/:orderId
   "updatedAt": "2025-12-04T16:00:01.000Z"
 }
 ```
+
+### Get Product Information
+
+```http
+GET /api/products/:productId
+```
+
+**Example:**
+
+```http
+GET /api/products/FLASH_SALE_PRODUCT_001
+```
+
+**Response:**
+
+```json
+{
+  "id": "FLASH_SALE_PRODUCT_001",
+  "name": "iPhone 15 Pro Max - Flash Sale",
+  "description": "Limited time offer - iPhone 15 Pro Max at special price",
+  "price": 999.99,
+  "availableStock": 1
+}
+```
+
+**Use Cases:**
+
+- Fetch current stock when page loads (F5)
+- Refresh stock after order cancellation
+- Display product information in UI
 
 ## 🎓 Learning Outcomes
 

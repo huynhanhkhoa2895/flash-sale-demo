@@ -26,10 +26,11 @@ async function bootstrap() {
         },
         consumer: {
           groupId: "notification-service-group",
-          sessionTimeout: 30000,
-          heartbeatInterval: 3000,
-          rebalanceTimeout: 60000,
+          sessionTimeout: 60000,
+          heartbeatInterval: 5000,
+          rebalanceTimeout: 120000,
           allowAutoTopicCreation: true,
+          maxInFlightRequests: 1,
         },
       },
     }
